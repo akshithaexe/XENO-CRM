@@ -56,9 +56,11 @@ const start = async () => {
   });
 };
 
-start().catch((err) => {
-  logger.error('Failed to start server:', err);
-  process.exit(1);
-});
+if (process.env.VERCEL !== '1') {
+  start().catch((err) => {
+    logger.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
 
 export default app;
