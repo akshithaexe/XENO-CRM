@@ -35,10 +35,12 @@ export async function getCampaignAnalytics(campaignId: string) {
     campaign: toCamelCase(campaign),
     deliveryStats: stats,
     funnel: {
-      sent: (stats['sent'] || 0) + (stats['delivered'] || 0) + (stats['opened'] || 0) + (stats['clicked'] || 0),
-      delivered: (stats['delivered'] || 0) + (stats['opened'] || 0) + (stats['clicked'] || 0),
-      opened: (stats['opened'] || 0) + (stats['clicked'] || 0),
-      clicked: stats['clicked'] || 0,
+      sent: (stats['sent'] || 0) + (stats['delivered'] || 0) + (stats['opened'] || 0) + (stats['read'] || 0) + (stats['clicked'] || 0) + (stats['converted'] || 0),
+      delivered: (stats['delivered'] || 0) + (stats['opened'] || 0) + (stats['read'] || 0) + (stats['clicked'] || 0) + (stats['converted'] || 0),
+      opened: (stats['opened'] || 0) + (stats['read'] || 0) + (stats['clicked'] || 0) + (stats['converted'] || 0),
+      read: (stats['read'] || 0) + (stats['clicked'] || 0) + (stats['converted'] || 0),
+      clicked: (stats['clicked'] || 0) + (stats['converted'] || 0),
+      converted: stats['converted'] || 0,
       failed: stats['failed'] || 0,
     },
   };

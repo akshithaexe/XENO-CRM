@@ -66,11 +66,20 @@ export default function CampaignDetailPage() {
               <span>Created {formatDate(campaign.createdAt)}</span>
             </div>
           </div>
-          {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
-            <Button onClick={handleLaunch} loading={launching}>
-              <Play className="w-4 h-4" /> Launch Campaign
-            </Button>
-          )}
+          <div className="flex items-center gap-sm">
+            {(campaign.status === 'running' || campaign.status === 'completed') && (
+              <Link href={`/campaigns/${id}/timeline`}>
+                <Button variant="secondary">
+                  <span className="material-symbols-outlined text-sm">timeline</span> View Timeline
+                </Button>
+              </Link>
+            )}
+            {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
+              <Button onClick={handleLaunch} loading={launching}>
+                <Play className="w-4 h-4" /> Launch Campaign
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Message Preview */}
@@ -90,7 +99,9 @@ export default function CampaignDetailPage() {
           sent: campaign.stats.sent,
           delivered: campaign.stats.delivered,
           opened: campaign.stats.opened,
+          read: campaign.stats.read || 0,
           clicked: campaign.stats.clicked,
+          converted: campaign.stats.converted || 0,
         }} />
       </div>
     </div>

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const CRM_RECEIPT_URL = process.env.CRM_RECEIPT_URL || 'http://localhost:5000/api/receipts';
+const CRM_RECEIPT_URL = process.env.CRM_RECEIPT_URL || 'http://localhost:5050/api/receipts';
 const MAX_RETRIES = 3;
 
 /**

@@ -1,16 +1,37 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Button from '@/components/ui/Button';
 import { aiChat } from '@/lib/api';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const CHAT_STORAGE_KEY = 'xeno-crm-ai-chat-history';
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
+  timestamp: string; // store as ISO string for serialization
+}
+
+function loadMessages(): Message[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch { /* ignore parse errors */ }
+  return [];
+}
+
+function saveMessages(messages: Message[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+  } catch { /* ignore quota errors */ }
 }
 
 export default function AICopilotPage() {
@@ -18,10 +39,32 @@ export default function AICopilotPage() {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    const stored = loadMessages();
+    if (stored.length > 0) {
+      setMessages(stored);
+    }
+    setHydrated(true);
+  }, []);
+
+  // Save to localStorage whenever messages change (after hydration)
+  useEffect(() => {
+    if (hydrated) {
+      saveMessages(messages);
+    }
+  }, [messages, hydrated]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleClearChat = useCallback(() => {
+    setMessages([]);
+    localStorage.removeItem(CHAT_STORAGE_KEY);
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
@@ -31,7 +74,7 @@ export default function AICopilotPage() {
       id: Date.now().toString(),
       role: 'user',
       content: userMessage,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -46,7 +89,7 @@ export default function AICopilotPage() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: response.data?.reply || response.reply || 'I could not process your request.',
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch (error: any) {
@@ -54,7 +97,7 @@ export default function AICopilotPage() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: `⚠️ Error connecting to Intelligence Engine.`,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -76,17 +119,33 @@ export default function AICopilotPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.92, filter: 'blur(10px)' }}
+      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      className="flex flex-col h-[calc(100vh-64px)] overflow-hidden"
+    >
       <motion.div 
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="p-lg border-b border-outline-variant bg-surface"
+        className="p-lg border-b border-outline-variant bg-surface flex items-center justify-between"
       >
-        <h1 className="text-headline-md font-bold text-on-surface flex items-center gap-sm">
-          <span className="material-symbols-outlined text-primary">auto_awesome</span>
-          Marketing Intelligence Workspace
-        </h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">Ask questions, generate insights, and build data-driven campaigns.</p>
+        <div>
+          <h1 className="text-headline-md font-bold text-on-surface flex items-center gap-sm">
+            <span className="material-symbols-outlined text-primary">auto_awesome</span>
+            Marketing Intelligence Workspace
+          </h1>
+          <p className="text-body-sm text-on-surface-variant mt-xs">Ask questions, generate insights, and build data-driven campaigns.</p>
+        </div>
+        {messages.length > 0 && (
+          <button
+            onClick={handleClearChat}
+            className="flex items-center gap-xs px-md py-sm text-label-md font-bold text-on-surface-variant hover:text-error bg-surface-container hover:bg-error-container border border-outline-variant rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">delete_sweep</span>
+            Clear Chat
+          </button>
+        )}
       </motion.div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -234,6 +293,7 @@ export default function AICopilotPage() {
 
         </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }
+

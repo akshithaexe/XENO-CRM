@@ -39,6 +39,14 @@ export async function dispatchCampaign(campaignId: string): Promise<void> {
 
     // Fan out: send a message for each recipient via the channel service
     let sentCount = 0;
+
+    // Batch-fetch customer spend data for intelligent simulation
+    const { data: customers } = await supabase
+      .from('customers')
+      .select('id, total_spend')
+      .in('id', customerIds);
+    const spendMap = new Map((customers || []).map((c: any) => [c.id, c.total_spend || 0]));
+
     for (const customerId of customerIds) {
       try {
         // Create a communication log entry
@@ -56,13 +64,14 @@ export async function dispatchCampaign(campaignId: string): Promise<void> {
 
         if (logErr || !log) throw logErr || new Error('Failed to create log');
 
-        // Call the channel service
+        // Call the channel service with totalSpend for intelligent simulation
         await axios.post(`${CHANNEL_SERVICE_URL}/send`, {
           campaignId,
           customerId,
           logId: log.id,
           channel: campaign.channel,
           message: campaign.message,
+          totalSpend: spendMap.get(customerId) || 0,
         });
 
         sentCount++;

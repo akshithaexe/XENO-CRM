@@ -63,6 +63,9 @@ export const deleteCampaign = (id: string) =>
 export const launchCampaign = (id: string) =>
   api.post(`/campaigns/${id}/launch`).then((r) => r.data);
 
+export const fetchCampaignLogs = (id: string, params?: Record<string, any>) =>
+  api.get(`/campaigns/${id}/logs`, { params }).then((r) => r.data);
+
 // === Analytics ===
 export const fetchOverviewAnalytics = () =>
   api.get('/analytics/overview').then((r) => r.data);

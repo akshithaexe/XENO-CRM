@@ -34,7 +34,7 @@ export default function AISuggestSegment({ onSuggestion }: AISuggestSegmentProps
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder="e.g., Customers who spent more than $500 in the last 3 months and haven't visited in 30 days..."
+        placeholder="e.g., Customers who spent more than ₹5000 in the last 3 months and haven't visited in 30 days..."
         className="w-full px-4 py-3 bg-white border border-purple-200 rounded-xl text-sm resize-none h-24 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
       />
       {error && <p className="text-sm text-red-500">{error}</p>}

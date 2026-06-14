@@ -5,7 +5,7 @@ interface ReceiptPayload {
   logId: string;
   campaignId: string;
   customerId: string;
-  status: 'delivered' | 'opened' | 'clicked' | 'failed' | 'bounced';
+  status: 'delivered' | 'opened' | 'read' | 'clicked' | 'converted' | 'failed' | 'bounced';
   timestamp: string;
   failureReason?: string;
 }
@@ -28,8 +28,14 @@ export async function processReceipt(payload: ReceiptPayload): Promise<void> {
       case 'opened':
         updateFields.opened_at = timestamp;
         break;
+      case 'read':
+        updateFields.read_at = timestamp;
+        break;
       case 'clicked':
         updateFields.clicked_at = timestamp;
+        break;
+      case 'converted':
+        updateFields.converted_at = timestamp;
         break;
       case 'failed':
       case 'bounced':
