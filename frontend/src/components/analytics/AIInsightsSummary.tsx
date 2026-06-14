@@ -3,7 +3,28 @@
 import React, { useState, useEffect } from 'react';
 import Button from '@/components/ui/Button';
 import { useAI } from '@/hooks/useAI';
-import { Sparkles, RefreshCw } from 'lucide-react';
+
+/**
+ * Strips markdown formatting artifacts from AI text to produce clean professional output.
+ */
+function cleanAIText(text: string): string {
+  return text
+    // Remove bold/italic markers
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    // Remove markdown headers
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bullet point dashes at start of lines
+    .replace(/^[-•]\s+/gm, '')
+    // Remove code blocks
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 export default function AIInsightsSummary() {
   const [insights, setInsights] = useState<string | null>(null);
@@ -11,31 +32,34 @@ export default function AIInsightsSummary() {
 
   const fetchInsights = async () => {
     const result = await getInsights();
-    if (result) setInsights(result);
+    if (result) setInsights(cleanAIText(result));
   };
 
   return (
-    <div className="bg-gradient-to-br from-purple-50 via-brand-50 to-pink-50 rounded-2xl border border-purple-200 p-6 space-y-4">
+    <div className="bg-surface rounded-2xl border border-outline-variant p-lg space-y-md shadow-sm">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-purple-600" />
-          <h3 className="font-semibold text-purple-900">AI Insights</h3>
+        <div className="flex items-center gap-sm">
+          <div className="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center">
+            <span className="material-symbols-outlined text-primary text-sm">insights</span>
+          </div>
+          <h3 className="font-bold text-on-surface text-body-md">Performance Insights</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={fetchInsights} loading={loading}>
-          <RefreshCw className="w-3.5 h-3.5" />
+          <span className="material-symbols-outlined text-sm">refresh</span>
           {insights ? 'Refresh' : 'Generate'}
         </Button>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-body-sm text-error">{error}</p>}
 
       {insights ? (
-        <div className="prose prose-sm text-purple-800 whitespace-pre-wrap">{insights}</div>
+        <div className="text-body-sm text-on-surface leading-relaxed whitespace-pre-wrap">{insights}</div>
       ) : (
-        <p className="text-sm text-purple-600">
+        <p className="text-body-sm text-on-surface-variant">
           Click &quot;Generate&quot; to get AI-powered performance insights based on your campaign data.
         </p>
       )}
     </div>
   );
 }
+

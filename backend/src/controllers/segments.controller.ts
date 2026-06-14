@@ -114,3 +114,44 @@ export const previewSegment = async (req: Request, res: Response, next: NextFunc
     next(error);
   }
 };
+
+export const getSegmentCustomers = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { data: segment, error: segError } = await supabase
+      .from('segments')
+      .select('rules')
+      .eq('id', req.params.id)
+      .single();
+
+    if (segError || !segment) {
+      res.status(404).json({ success: false, error: 'Segment not found' });
+      return;
+    }
+
+    const { customerIds } = await evaluateSegment(segment.rules);
+    const sampleIds = customerIds.slice(0, 5);
+
+    if (sampleIds.length === 0) {
+      res.json({ success: true, data: { customers: [], total: 0 } });
+      return;
+    }
+
+    const { data: customers, error } = await supabase
+      .from('customers')
+      .select('id, name, email, phone, total_spend, visit_count')
+      .in('id', sampleIds);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: {
+        customers: (customers || []).map(toCamelCase),
+        total: customerIds.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

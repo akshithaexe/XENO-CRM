@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import { aiChat } from '@/lib/api';
 import Link from 'next/link';
@@ -35,6 +36,7 @@ function saveMessages(messages: Message[]) {
 }
 
 export default function AICopilotPage() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -66,6 +68,31 @@ export default function AICopilotPage() {
     localStorage.removeItem(CHAT_STORAGE_KEY);
   }, []);
 
+  const cleanAIText = (text: string): string => {
+    return text
+      // Remove <toolcall>...</toolcall> and similar XML blocks
+      .replace(/<\/?tool_?call[^>]*>[\s\S]*?<\/tool_?call>/gi, '')
+      .replace(/<\/?tool_?call[^>]*>/gi, '')
+      .replace(/<\/?function[^>]*>[\s\S]*?<\/function>/gi, '')
+      .replace(/<\/?function[^>]*>/gi, '')
+      .replace(/<[a-z_]+>[^<]*<\/[a-z_]+>/gi, '')
+      // Remove standalone JSON objects
+      .replace(/\{"\w+":\s*"[^"]*"\}\s*/g, '')
+      // Remove markdown
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/_([^_]+)_/g, '$1')
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/^[-•]\s+/gm, '')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`([^`]+)`/g, '$1')
+      // Clean "I'll search the database" preambles
+      .replace(/I'?ll\s+(search|look\s+up|query|fetch|find|check)\s+.*?(database|CRM|DB|system).*?\.\s*/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
 
@@ -81,28 +108,55 @@ export default function AICopilotPage() {
     setInput('');
     setIsTyping(true);
 
-    try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
-      const response = await aiChat(userMessage, history);
+    const maxRetries = 2;
+    let lastError: any = null;
 
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.data?.reply || response.reply || 'I could not process your request.',
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (error: any) {
-      const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `⚠️ Error connecting to Intelligence Engine.`,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsTyping(false);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const history = messages.map((m) => ({ role: m.role, content: m.content }));
+        const response = await aiChat(userMessage, history);
+
+        const aiMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: cleanAIText(response.data?.reply || response.reply || 'I could not process your request.'),
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        setIsTyping(false);
+        return;
+      } catch (error: any) {
+        lastError = error;
+        const status = error?.response?.status;
+        const isRateLimit = status === 429 || error?.message?.includes('429');
+
+        if (isRateLimit && attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
+          continue;
+        }
+        break;
+      }
     }
+
+    // Build a helpful error message
+    let errorText = 'Something went wrong. Please try again in a moment.';
+    const status = lastError?.response?.status;
+    if (status === 429) {
+      errorText = 'The service is temporarily busy. Please wait a few seconds and try again.';
+    } else if (status === 500 || status === 502 || status === 503) {
+      errorText = 'The AI service is temporarily unavailable. Please try again shortly.';
+    } else if (lastError?.code === 'ECONNABORTED' || lastError?.message?.includes('timeout')) {
+      errorText = 'The request took too long. Please try a shorter question.';
+    }
+
+    const errorMsg: Message = {
+      id: (Date.now() + 1).toString(),
+      role: 'assistant',
+      content: errorText,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, errorMsg]);
+    setIsTyping(false);
   };
 
   const containerVariants = {
@@ -132,10 +186,10 @@ export default function AICopilotPage() {
       >
         <div>
           <h1 className="text-headline-md font-bold text-on-surface flex items-center gap-sm">
-            <span className="material-symbols-outlined text-primary">auto_awesome</span>
-            Marketing Intelligence Workspace
+            <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+            Xena
           </h1>
-          <p className="text-body-sm text-on-surface-variant mt-xs">Ask questions, generate insights, and build data-driven campaigns.</p>
+          <p className="text-body-sm text-on-surface-variant mt-xs">Your AI-powered marketing intelligence assistant.</p>
         </div>
         {messages.length > 0 && (
           <button
@@ -162,7 +216,7 @@ export default function AICopilotPage() {
                 >
                   <span className="material-symbols-outlined text-6xl text-outline mb-sm opacity-50">smart_toy</span>
                   <p className="text-center max-w-md text-on-surface-variant text-body-md">
-                    I'm your Enterprise Intelligence Copilot. How can I help you drive revenue today?
+                    Hi, I'm Xena — your CRM intelligence assistant. How can I help you drive revenue today?
                   </p>
                   <div className="flex gap-sm flex-wrap justify-center mt-md">
                     <button onClick={() => setInput("Who are my top spending customers this month?")} className="px-md py-sm bg-surface hover:bg-surface-container-high border border-outline-variant text-on-surface rounded-lg text-label-md font-bold transition-colors shadow-sm">
@@ -222,7 +276,7 @@ export default function AICopilotPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                placeholder="Ask your Intelligence Copilot..."
+                placeholder="Ask Xena anything..."
                 className="flex-1 px-lg py-md bg-surface-container-low border border-outline-variant rounded-full text-body-md text-on-surface focus:ring-2 focus:ring-secondary-fixed outline-none placeholder:text-on-surface-variant/50"
                 disabled={isTyping}
               />
@@ -263,7 +317,7 @@ export default function AICopilotPage() {
                 </span>
               </div>
             </div>
-            <Button size="sm" className="w-full mt-md text-label-md">Execute Recommendation</Button>
+            <Button size="sm" className="w-full mt-md text-label-md" onClick={() => router.push('/campaigns/new')}>Execute Recommendation</Button>
           </motion.div>
 
           <motion.div variants={itemVariants} className="grid grid-cols-2 gap-md">

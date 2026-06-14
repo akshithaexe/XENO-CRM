@@ -11,7 +11,7 @@ const navItems = [
   { href: '/segments', label: 'Audiences', icon: 'person_search' },
   { href: '/campaigns', label: 'Campaigns', icon: 'campaign' },
   { href: '/analytics', label: 'Analytics', icon: 'assessment' },
-  { href: '/ai-assistant', label: 'AI Copilot', icon: 'auto_awesome' },
+  { href: '/ai-assistant', label: 'Xena AI', icon: 'auto_awesome' },
 ];
 
 const sidebarVariants = {
@@ -67,7 +67,7 @@ export default function Sidebar() {
     >
       {/* Logo */}
       <motion.div variants={logoVariants} className="flex items-center gap-md px-md py-lg mb-md">
-        <Link href="/" className="flex items-center gap-md group">
+        <Link href="/dashboard" className="flex items-center gap-md group">
           <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
             <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>rocket_launch</span>
           </div>

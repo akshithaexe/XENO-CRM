@@ -3,13 +3,13 @@ import { getOverviewAnalytics } from './analyticsService';
 import { logger } from '../utils/logger';
 import supabase from '../config/db';
 
-// Using a free model on OpenRouter
-const MODEL = 'openrouter/free';
+// Using an NVIDIA NIM model
+const MODEL = 'meta/llama-3.1-70b-instruct';
 
 /**
  * Helper: wraps OpenRouter calls with retry on rate-limit (429) errors.
  */
-async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await fn();
@@ -103,11 +103,20 @@ export async function getInsights(analyticsData: any): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: 'You are a marketing analytics expert. Analyze campaign performance data and provide 3-5 actionable bullet points. Be specific and data-driven.',
+          content: `You are a senior marketing analytics consultant writing a brief executive summary.
+
+Rules:
+- Write in clear, professional prose. Use short numbered paragraphs (1. 2. 3. etc.).
+- Do NOT use markdown formatting: no asterisks (*), no dashes (-), no bullet points, no bold/italic markers, no headers (#), no code blocks.
+- Do NOT use emojis.
+- Keep each insight to 1-2 sentences.
+- Be specific with numbers and percentages from the data.
+- End with one clear recommendation.
+- Write exactly 3-5 insights.`,
         },
         {
           role: 'user',
-          content: `Analyze this data:\n${JSON.stringify(analyticsData, null, 2)}`,
+          content: `Analyze this campaign performance data and provide executive insights:\n${JSON.stringify(analyticsData, null, 2)}`,
         },
       ],
       temperature: 0.4,
@@ -165,13 +174,18 @@ Return ONLY valid JSON array with no explanation or markdown fences.`,
   });
 
   const text = intentResponse.choices[0]?.message?.content?.trim() || '[{"action":"none","params":{}}]';
-  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  
+  let cleaned = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+  const match = cleaned.match(/\[\s*\{[\s\S]*\}\s*\]/);
+  if (match) {
+    cleaned = match[0];
+  }
 
   try {
     const intents = JSON.parse(cleaned);
     return Array.isArray(intents) ? intents : [{ action: 'none', params: {} }];
   } catch {
-    logger.warn('Failed to parse lookup intents:', cleaned);
+    logger.warn('Failed to parse lookup intents:', text);
     return [{ action: 'none', params: {} }];
   }
 }
@@ -334,6 +348,35 @@ async function executeLookup(intent: LookupIntent): Promise<string> {
 }
 
 /**
+ * Strips tool-call artifacts, XML tags, and raw JSON from AI responses.
+ */
+function cleanResponse(text: string): string {
+  return text
+    // Remove <toolcall>...</toolcall> and <tool_call>...</tool_call> blocks
+    .replace(/<\/?tool_?call[^>]*>[\s\S]*?<\/tool_?call>/gi, '')
+    .replace(/<\/?tool_?call[^>]*>/gi, '')
+    // Remove <function>...</function> blocks
+    .replace(/<\/?function[^>]*>[\s\S]*?<\/function>/gi, '')
+    .replace(/<\/?function[^>]*>/gi, '')
+    // Remove any remaining XML-like tags
+    .replace(/<[a-z_]+>[^<]*<\/[a-z_]+>/gi, '')
+    // Remove standalone JSON objects that look like parameters
+    .replace(/\{"\w+":\s*"[^"]*"\}\s*/g, '')
+    // Remove markdown artifacts
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[-•]\s+/gm, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    // Clean up sentences like "I'll search for..." that precede tool calls
+    .replace(/I'?ll\s+(search|look\s+up|query|fetch|find|check)\s+.*?(database|CRM|DB|system).*?\.\s*/gi, '')
+    // Clean up extra whitespace/newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Conversational AI agent for the CRM assistant chat — with full database access.
  */
 export async function chatWithAgent(
@@ -369,19 +412,23 @@ export async function chatWithAgent(
     const messages: any[] = [
       {
         role: 'system',
-        content: `You are an AI-native CRM assistant for Xeno CRM — a campaign management platform.
-You have FULL ACCESS to the CRM database and can look up any customer, order, campaign, segment, or communication log.
+        content: `You are Xena, an AI-native CRM assistant for Xeno CRM — a campaign management platform.
+Your name is Xena. If someone asks for your name, say "I am Xena".
 
-Help marketers with:
-1. Customer lookups — find customers by phone, email, name, or ID and provide their details
-2. Order history — look up orders for specific customers
-3. Segment creation — suggest rules in JSON format when asked
-4. Message drafting — for WhatsApp, SMS, Email, RCS
-5. Performance analysis — analyze campaign metrics
-6. Campaign strategy — targeting, timing, channels
+The database has ALREADY been queried for you. The results are included below in this system message. Use them directly to answer the user's question.
 
-When database results are provided below, use them to give precise, data-driven answers.
-Be concise and actionable. Format data clearly for readability.${crmContext}${dbContext}`,
+CRITICAL RULES:
+1. NEVER output tool calls, function calls, XML tags, or any code-like syntax. You are NOT calling tools. The data is already provided to you below.
+2. NEVER output <toolcall>, <function>, <tool_call>, or any XML/HTML tags.
+3. NEVER output raw JSON. Present data as readable sentences and tables.
+4. Do NOT say "I'll search the database" or "Let me look that up" — the data is already here.
+5. Write in clear, professional prose. Use numbered points (1. 2. 3.) when listing items.
+6. Do NOT use markdown formatting: no asterisks (*), no dashes (-) for lists, no bold/italic markers (**), no headers (#).
+7. Do NOT use emojis.
+8. If the database results say "No customers found" or similar, tell the user directly.
+9. When presenting customer data, format it as: Name, Email, Phone, Total Spend, Visit Count — in readable sentences.
+
+Help marketers with customer lookups, order history, segment creation, message drafting, performance analysis, and campaign strategy.${crmContext}${dbContext}`,
       },
       ...history.map((h) => ({
         role: h.role === 'assistant' ? 'assistant' : 'user',
@@ -397,6 +444,19 @@ Be concise and actionable. Format data clearly for readability.${crmContext}${db
       max_tokens: 1000,
     });
 
-    return response.choices[0]?.message?.content?.trim() || 'I could not process your request. Please try again.';
+    const raw = response.choices[0]?.message?.content?.trim() || 'I could not process your request. Please try again.';
+    const cleaned = cleanResponse(raw);
+
+    // If cleaning removed everything meaningful, return a fallback
+    if (cleaned.length < 10) {
+      // The model only output tool calls — re-try with a more direct prompt
+      if (dbContext) {
+        return cleanResponse(`Based on the CRM data: ${dbContext.replace('Database query results:\n', '')}`);
+      }
+      return 'I could not find the information you requested. Please try rephrasing your question.';
+    }
+
+    return cleaned;
   });
 }
+

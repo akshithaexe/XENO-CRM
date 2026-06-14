@@ -5,7 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 60000,
 });
 
 // === Customers ===
@@ -43,6 +43,10 @@ export const deleteSegment = (id: string) =>
 
 export const previewSegment = (id: string, rules: any) =>
   api.post(`/segments/${id}/preview`, { rules }).then((r) => r.data);
+
+export const fetchSegmentCustomers = (id: string) =>
+  api.get(`/segments/${id}/customers`).then((r) => r.data);
+
 
 // === Campaigns ===
 export const fetchCampaigns = (params?: Record<string, any>) =>
